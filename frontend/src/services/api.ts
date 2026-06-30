@@ -1,8 +1,9 @@
 // src/services/api.ts
 // Centralized API client for Alfin Banco backend (FastAPI)
 
-// ASÍ DEBE QUEDAR LA URL BASE:
-const BASE_URL = '/api/v1';
+// Lee la variable de entorno de Vercel en producción o usa localhost en desarrollo
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+const BASE_URL = `${API_URL}/api/v1`;
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 export interface LoginPayload  { email: string; password: string }
