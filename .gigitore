@@ -1,0 +1,13 @@
+# Dependencias (NUNCA se suben a GitHub)
+node_modules/
+dist/
+build/
+
+# Variables de entorno y secretos
+.env
+.env.local
+
+# Archivos del sistema y de VS Code
+.vscode/
+.DS_Store
+Thumbs.db
