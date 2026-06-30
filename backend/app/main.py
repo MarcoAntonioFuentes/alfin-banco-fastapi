@@ -139,11 +139,19 @@ Sistema bancario completo con:
 # =============================================================================
 
 # CORS - Controla orígenes permitidos
+# CORS - Controla orígenes permitidos (Forzado para producción y local)
+origenes_permitidos = [
+    "http://localhost:5173",
+    "http://localhost:3000",
+    "https://alfin-banco-fastapi-six.vercel.app",
+    "https://alfin-banco-fastapi-7uj6andbl-marcoantoniofuentes-projects.vercel.app"
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.get_cors_origins(),
+    allow_origins=origenes_permitidos,
     allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_methods=["*"],
     allow_headers=["*"],
 )
 
