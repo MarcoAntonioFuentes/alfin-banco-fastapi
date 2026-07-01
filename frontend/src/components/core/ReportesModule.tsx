@@ -297,7 +297,7 @@ export default function ReportesModule() {
 
               {dLoading ? (
                 <div className="flex justify-center py-8"><Spinner size="md" color="violet" /></div>
-              ) : !desemb || desemb.desembolsos.length === 0 ? (
+              ) : !desemb || (desemb.desembolsos ?? []).length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-10 text-center">
                   <span className="text-4xl mb-3">📭</span>
                   <p className="text-gray-500 font-display font-semibold text-sm">Sin desembolsos hoy</p>
@@ -316,7 +316,7 @@ export default function ReportesModule() {
                     </div>
                   </div>
                   <div className="space-y-2 max-h-44 overflow-y-auto pr-1">
-                    {desemb.desembolsos.map((d: DesembolsoHoy) => (
+                    {(desemb.desembolsos ?? []).map((d: DesembolsoHoy) => (
                       <div key={d.id} className="flex items-center justify-between bg-gray-50 rounded-xl px-3 py-2.5 hover:bg-gray-100 transition-colors">
                         <div className="min-w-0">
                           <p className="font-mono text-xs text-gray-400 leading-none mb-0.5">{d.numero_credito}</p>
