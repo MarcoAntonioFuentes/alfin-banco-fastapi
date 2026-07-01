@@ -1,7 +1,12 @@
 // src/services/coreApi.ts
 // API client for Core Bancario — with proper error differentiation
 
-const BASE_URL = '/api/v1';
+// FIX: antes era '/api/v1' (ruta relativa), lo que hacía que las peticiones
+// cayeran en el catch-all de vercel.json (que sirve index.html) en vez de
+// llegar al backend FastAPI en Render. Ahora usa la misma variable de entorno
+// que src/services/api.ts, apuntando directamente al backend.
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+const BASE_URL = `${API_URL}/api/v1`
 
 async function apiFetch<T>(path: string, options: RequestInit = {}, token?: string): Promise<T> {
   const headers: Record<string, string> = {
