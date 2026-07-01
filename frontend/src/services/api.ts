@@ -1,24 +1,14 @@
-// src/services/api.ts
-// Centralized API client for Alfin Banco backend (FastAPI)
+// src/services/coreApi.ts
+// API client for Core Bancario — with proper error differentiation
 
-// Lee la variable de entorno de Vercel en producción o usa localhost en desarrollo
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
-const BASE_URL = `${API_URL}/api/v1`;
+// FIX: antes era '/api/v1' (ruta relativa), lo que hacía que las peticiones
+// cayeran en el catch-all de vercel.json (que sirve index.html) en vez de
+// llegar al backend FastAPI en Render. Ahora usa la misma variable de entorno
+// que src/services/api.ts, apuntando directamente al backend.
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+const BASE_URL = `${API_URL}/api/v1`
 
-// ─── Types ────────────────────────────────────────────────────────────────────
-export interface LoginPayload  { email: string; password: string }
-export interface RegisterPayload {
-  email: string; password: string
-  nombre_completo: string; dni: string; telefono?: string
-}
-export interface ApiError { error: string; detalle?: string | object; codigo?: string }
-
-// ─── Base fetch ───────────────────────────────────────────────────────────────
-async function apiFetch<T>(
-  path: string,
-  options: RequestInit = {},
-  token?: string | null
-): Promise<T> {
+async function apiFetch<T>(path: string, options: RequestInit = {}, token?: string): Promise<T> {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     ...(options.headers as Record<string, string> ?? {}),
@@ -28,94 +18,121 @@ async function apiFetch<T>(
   let res: Response
   try {
     res = await fetch(`${BASE_URL}${path}`, { ...options, headers })
-  } catch {
-    // Network error — backend not reachable
-    throw { status: 0, error: 'No se puede conectar al servidor. Verifica que el backend esté corriendo en localhost:8000.' }
+  } catch (networkErr) {
+    // Genuine network failure (backend not running, CORS blocked, etc.)
+    console.error('[coreApi] Network error:', networkErr)
+    throw {
+      status: 0,
+      error: 'Sin conexión con el servidor',
+      detalle: 'El backend no responde. Verifica que uvicorn esté corriendo en el puerto 8000.',
+    }
   }
 
-  let body: unknown
-  const contentType = res.headers.get('content-type') ?? ''
+  let body: unknown = null
   try {
-    body = contentType.includes('application/json') ? await res.json() : await res.text()
-  } catch {
-    body = null
-  }
+    const ct = res.headers.get('content-type') ?? ''
+    body = ct.includes('application/json') ? await res.json() : await res.text()
+  } catch { body = null }
 
   if (!res.ok) {
-    const err = body as ApiError & { detail?: string | { msg: string }[] }
-    // FastAPI validation error (422) returns { detail: [...] }
-    let errorMsg = 'Error desconocido'
-    if (err?.error) {
-      errorMsg = err.error
-    } else if (typeof err?.detail === 'string') {
-      errorMsg = err.detail
-    } else if (Array.isArray(err?.detail)) {
-      errorMsg = err.detail.map((d: { msg: string }) => d.msg).join(', ')
-    }
-    throw { status: res.status, error: errorMsg, detalle: err?.detail ?? body, codigo: err?.codigo }
-  }
+    const err = body as { error?: string; detalle?: string; detail?: string | { msg: string }[] }
+    let msg = `Error ${res.status}`
+    if (err?.error)                      msg = err.error
+    else if (typeof err?.detail === 'string') msg = err.detail
+    else if (Array.isArray(err?.detail)) msg = err.detail.map(d => d.msg).join(', ')
 
+    console.error(`[coreApi] HTTP ${res.status} ${path}:`, body)
+    throw { status: res.status, error: msg, detalle: body }
+  }
   return body as T
 }
 
-// ─── Auth ─────────────────────────────────────────────────────────────────────
-export const authApi = {
-  login: (payload: LoginPayload) =>
-    apiFetch<{ access_token: string; refresh_token: string; usuario: object }>(
-      '/auth/login', { method: 'POST', body: JSON.stringify(payload) }
-    ),
+// ─── Types ────────────────────────────────────────────────────────────────────
 
-  register: (payload: RegisterPayload) =>
-    apiFetch('/auth/registro', { method: 'POST', body: JSON.stringify(payload) }),
-
-  logout: (token: string) =>
-    apiFetch('/auth/logout', { method: 'POST' }, token),
-
-  me: (token: string) =>
-    apiFetch('/auth/me', {}, token),
-
-  // Resolve DNI → email by calling backend
-  resolverDni: (dni: string) =>
-    apiFetch<{ email: string }>(`/auth/resolver-dni?dni=${dni}`),
+export interface SolicitudBandeja {
+  id: string; numero_credito: string; cliente: string; dni: string
+  monto_solicitado: number; monto_aprobado: number | null; moneda: string
+  estado: string; tasa_interes: number; plazo_meses: number; proposito: string | null
+  score_crediticio: number | null; analista: string | null
+  fecha_solicitud: string; observaciones: string | null
 }
 
-// ─── Cuentas & Dashboard ──────────────────────────────────────────────────────
-export const cuentasApi = {
-  dashboard: (token: string) =>
-    apiFetch('/cuentas/dashboard', {}, token),
+export interface BandejaResponse {
+  items: SolicitudBandeja[]; total: number; pagina: number
+  por_pagina: number; total_paginas: number
+}
 
-  listar: (token: string) =>
-    apiFetch('/cuentas/', {}, token),
+export interface ResumenCartera {
+  total_creditos_activos: number; monto_total_desembolsado: number
+  monto_total_pendiente_cobro: number; creditos_en_evaluacion: number
+  creditos_en_mora: number; tasa_morosidad: number
+  desembolsos_hoy: number; monto_desembolsado_hoy: number
+}
 
-  saldo: (token: string, cuentaId: string) =>
-    apiFetch(`/cuentas/${cuentaId}/saldo`, {}, token),
+export interface CarteraItem {
+  id: string; numero_credito: string; cliente: string; dni: string
+  monto_aprobado: number | null; moneda: string; estado: string
+  tasa_interes: number; plazo_meses: number; fecha_solicitud: string
+  fecha_desembolso: string | null; cuotas_pendientes: number | null
+  cuotas_vencidas: number | null; analista: string | null
+}
 
-  movimientos: (token: string, cuentaId: string, params?: Record<string, string | number>) => {
-    const qs = params ? '?' + new URLSearchParams(params as Record<string, string>).toString() : ''
-    return apiFetch(`/cuentas/${cuentaId}/movimientos${qs}`, {}, token)
+export interface DesembolsoHoy {
+  id: string; numero_credito: string; cliente: string; dni: string
+  monto_aprobado: number | null; moneda: string; tasa_interes: number
+  plazo_meses: number; fecha_desembolso: string | null; aprobado_por: string | null
+}
+
+export interface DesembolsosResponse {
+  fecha: string; total_operaciones: number
+  monto_total_pen: number; monto_total_usd: number; desembolsos: DesembolsoHoy[]
+}
+
+// ─── Bandeja ──────────────────────────────────────────────────────────────────
+export const bandejaApi = {
+  listar: (token: string, estado?: string, pagina = 1, porPagina = 20) => {
+    const qs = new URLSearchParams({ pagina: String(pagina), por_pagina: String(porPagina) })
+    if (estado) qs.set('estado', estado)
+    return apiFetch<BandejaResponse>(`/creditos/bandeja?${qs}`, {}, token)
   },
 
-  depositar: (token: string, body: object) =>
-    apiFetch('/cuentas/depositar', { method: 'POST', body: JSON.stringify(body) }, token),
+  asignarAnalista: (token: string, creditoId: string, analistaId: string, obs?: string) =>
+    apiFetch(`/creditos/${creditoId}/asignar-analista`, {
+      method: 'PATCH', body: JSON.stringify({ analista_id: analistaId, observaciones: obs }),
+    }, token),
 
-  retirar: (token: string, body: object) =>
-    apiFetch('/cuentas/retirar', { method: 'POST', body: JSON.stringify(body) }, token),
+  evaluar: (token: string, creditoId: string, data: {
+    score_crediticio: number; tasa_interes_propuesta: number
+    monto_aprobado_propuesto?: number; plazo_meses_propuesto?: number
+    recomendacion: 'aprobar' | 'rechazar' | 'escalar_comite'; observaciones: string
+  }) => apiFetch(`/creditos/${creditoId}/evaluar`, {
+    method: 'PATCH', body: JSON.stringify(data),
+  }, token),
 
-  transferir: (token: string, body: object) =>
-    apiFetch('/cuentas/transferir', { method: 'POST', body: JSON.stringify(body) }, token),
+  decisionComite: (token: string, creditoId: string, data: {
+    decision: 'aprobado' | 'rechazado'; monto_aprobado?: number
+    tasa_interes_final?: number; plazo_meses_final?: number
+    motivo_rechazo?: string; observaciones?: string
+  }) => apiFetch(`/creditos/${creditoId}/decision-comite`, {
+    method: 'PATCH', body: JSON.stringify(data),
+  }, token),
+
+  desembolsar: (token: string, creditoId: string, obs?: string) =>
+    apiFetch(`/creditos/${creditoId}/desembolsar`, {
+      method: 'POST', body: JSON.stringify({ confirmar: true, observaciones: obs }),
+    }, token),
 }
 
-// ─── Créditos ─────────────────────────────────────────────────────────────────
-export const creditosApi = {
-  simular: (monto: number, tea: number, plazo: number) =>
-    apiFetch(`/creditos/simulador?monto=${monto}&tea=${tea}&plazo_meses=${plazo}`),
+// ─── Reportes ─────────────────────────────────────────────────────────────────
+export const reportesApi = {
+  resumenCartera: (token: string) =>
+    apiFetch<ResumenCartera>('/creditos/reportes/resumen-cartera', {}, token),
 
-  solicitar: (token: string, body: object) =>
-    apiFetch('/creditos/solicitar', { method: 'POST', body: JSON.stringify(body) }, token),
+  carteraActiva: (token: string, pagina = 1, porPagina = 25) =>
+    apiFetch<{ items: CarteraItem[]; total: number; pagina: number; por_pagina: number; total_paginas: number }>(
+      `/creditos/reportes/cartera-activa?pagina=${pagina}&por_pagina=${porPagina}`, {}, token
+    ),
 
-  misCreditos: (token: string) =>
-    apiFetch('/creditos/mis-creditos', {}, token),
-
-  cronograma: (token: string, creditoId: string) =>
-    apiFetch(`/creditos/${creditoId}/cronograma`, {}, token),
+  desembolsosHoy: (token: string) =>
+    apiFetch<DesembolsosResponse>('/creditos/reportes/desembolsos-hoy', {}, token),
 }
