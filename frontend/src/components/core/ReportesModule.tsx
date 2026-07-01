@@ -26,6 +26,10 @@ function fmtDate(iso: string) {
     }).format(new Date(iso))
   } catch { return iso }
 }
+// Protege cualquier .toFixed() contra null/undefined/NaN — nunca vuelve a tronar la UI
+function safeFixed(n: number | null | undefined, decimals = 1): string {
+  return typeof n === 'number' && !isNaN(n) ? n.toFixed(decimals) : (0).toFixed(decimals)
+}
 
 // ─── KPI Card ─────────────────────────────────────────────────────────────────
 interface KpiProps {
@@ -218,15 +222,20 @@ export default function ReportesModule() {
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           {[...Array(8)].map((_, i) => <Sk key={i} className="h-32" />)}
         </div>
-      ) : kpis ? (
+      ) : kpis ? (() => {
+        // Valor local y seguro de la tasa de morosidad — evita repetir "?? 0" o .toFixed()
+        // sin protección en cada lugar donde se usa más abajo.
+        const tasaMorosidad = kpis.tasa_morosidad ?? 0
+
+        return (
         <>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
             <KpiCard label="Cartera Activa"      value={fmt(kpis.monto_total_desembolsado)}           sub={`${kpis.total_creditos_activos} créditos vigentes`}  icon="💼" color="violet" />
             <KpiCard label="Desembolsado Hoy"    value={fmt(desemb?.monto_total_pen ?? 0)}            sub={`${desemb?.total_operaciones ?? 0} operaciones`}      icon="💸" color="orange" />
             <KpiCard label="Pendiente de Cobro"  value={fmt(kpis.monto_total_pendiente_cobro)}        sub="Cuotas por vencer"                                    icon="📅" color="blue" />
             <KpiCard label="En Evaluación"       value={String(kpis.creditos_en_evaluacion)}          sub="Solicitudes activas"                                  icon="🔍" color="amber" />
-            <KpiCard label="En Mora"             value={String(kpis.creditos_en_mora)}                sub={`Tasa: ${kpis.tasa_morosidad.toFixed(1)}%`}            icon="⚠️" color="red"
-              trend={kpis.creditos_en_mora > 0 ? { value: `${kpis.tasa_morosidad.toFixed(1)}%`, up: false } : undefined} />
+            <KpiCard label="En Mora"             value={String(kpis.creditos_en_mora)}                sub={`Tasa: ${safeFixed(tasaMorosidad, 1)}%`}               icon="⚠️" color="red"
+              trend={kpis.creditos_en_mora > 0 ? { value: `${safeFixed(tasaMorosidad, 1)}%`, up: false } : undefined} />
             <KpiCard label="Créditos Activos"    value={String(kpis.total_creditos_activos)}          sub="Vigentes"                                             icon="✅" color="emerald" />
             <KpiCard label="Operaciones Hoy"     value={String(kpis.desembolsos_hoy)}                 sub="Desembolsos del día"                                  icon="📊" color="violet" />
             <KpiCard label="Desemb. Hoy (USD)"   value={fmt(desemb?.monto_total_usd ?? 0, 'USD')}    sub="Dólares americanos"                                   icon="💵" color="emerald" />
@@ -240,10 +249,10 @@ export default function ReportesModule() {
               <div className="flex items-center justify-between mb-5">
                 <h3 className="font-display font-semibold text-base text-charcoal">Salud de la cartera</h3>
                 <span className={`text-xs font-body font-semibold px-2.5 py-1 rounded-full ${
-                  kpis.tasa_morosidad < 5  ? 'bg-emerald-50 text-emerald-600' :
-                  kpis.tasa_morosidad < 10 ? 'bg-amber-50 text-amber-600' : 'bg-red-50 text-red-600'
+                  tasaMorosidad < 5  ? 'bg-emerald-50 text-emerald-600' :
+                  tasaMorosidad < 10 ? 'bg-amber-50 text-amber-600' : 'bg-red-50 text-red-600'
                 }`}>
-                  {kpis.tasa_morosidad < 5 ? '🟢 Saludable' : kpis.tasa_morosidad < 10 ? '🟡 Precaución' : '🔴 En riesgo'}
+                  {tasaMorosidad < 5 ? '🟢 Saludable' : tasaMorosidad < 10 ? '🟡 Precaución' : '🔴 En riesgo'}
                 </span>
               </div>
               <div className="space-y-4">
@@ -263,7 +272,7 @@ export default function ReportesModule() {
               </div>
               <div className="mt-5 pt-4 border-t border-gray-50 grid grid-cols-2 gap-3">
                 <div className="text-center bg-gray-50 rounded-xl p-3">
-                  <p className="font-display font-bold text-xl text-violet-600">{kpis.tasa_morosidad.toFixed(2)}%</p>
+                  <p className="font-display font-bold text-xl text-violet-600">{safeFixed(tasaMorosidad, 2)}%</p>
                   <p className="text-gray-400 text-xs font-body mt-0.5">Tasa de morosidad</p>
                 </div>
                 <div className="text-center bg-gray-50 rounded-xl p-3">
@@ -332,7 +341,8 @@ export default function ReportesModule() {
             </div>
           </div>
         </>
-      ) : null}
+        )
+      })() : null}
     </div>
   )
 }
