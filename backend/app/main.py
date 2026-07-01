@@ -151,8 +151,8 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=origenes_permitidos,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "Accept", "X-Process-Time"], # <--- Cabeceras explícitas
 )
 
 # Hosts de confianza (solo en producción)
