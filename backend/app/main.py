@@ -144,12 +144,15 @@ origenes_permitidos = [
     "http://localhost:5173",
     "http://localhost:3000",
     "https://alfin-banco-fastapi-six.vercel.app",
-    "https://alfin-banco-fastapi-7uj6andbl-marcoantoniofuentes-projects.vercel.app"
 ]
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origenes_permitidos,
+    # Cubre automáticamente TODOS los preview deployments de Vercel para este
+    # proyecto (el hash cambia en cada deploy, ej: -hvx5ovxn8-, -7uj6andbl-),
+    # sin necesidad de agregar cada URL manualmente al array de arriba.
+    allow_origin_regex=r"https://alfin-banco-fastapi.*\.vercel\.app",
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type", "Accept", "X-Process-Time"], # <--- Cabeceras explícitas
